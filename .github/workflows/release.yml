@@ -1,0 +1,57 @@
+name: Publish Client
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Install Kiota
+      run: dotnet tool install --global kiota
+
+    - name: Generate C# Library
+      run: kiota generate --openapi https://developer.dhl.com/sites/default/files/2024-04/dpdhl-express-api-2.11.0_swagger.yaml --additional-data false --language csharp -o TWC.ClassLib.DhlExpressClient -c TWC.ClassLib.DhlExpressClient --log-level information --clean-output true --namespace-name TWC.ClassLib.DhlExpressClient
+
+    - name: Create .csproj file
+      run: |
+        echo '<Project Sdk="Microsoft.NET.Sdk">' >> TWC.ClassLib.DhlExpressClient/TWC.ClassLib.DhlExpressClient.csproj
+        echo '  <PropertyGroup>' >> TWC.ClassLib.DhlExpressClient/YourProjectName.csproj
+        echo '    <OutputType>Library</OutputType>' >> TWC.ClassLib.DhlExpressClient/TWC.ClassLib.DhlExpressClient.csproj
+        echo '    <RootNamespace>TWC.ClassLib.DhlExpressClient</RootNamespace>' >> TWC.ClassLib.DhlExpressClient/TWC.ClassLib.DhlExpressClient.csproj
+        echo '    <AssemblyName>TWC.ClassLib.DhlExpressClient</AssemblyName>' >> TWC.ClassLib.DhlExpressClient/TWC.ClassLib.DhlExpressClient.csproj
+        echo '    <TargetFramework>net8.0</TargetFramework>' >> TWC.ClassLib.DhlExpressClient/TWC.ClassLib.DhlExpressClient.csproj
+        echo '    <PackageId>TWC.ClassLib.DhlExpressClient</PackageId>' >> TWC.ClassLib.DhlExpressClient/TWC.ClassLib.DhlExpressClient.csproj
+        echo '    <Authors>Christian Schou</Authors>' >> TWC.ClassLib.DhlExpressClient/TWC.ClassLib.DhlExpressClient.csproj
+        echo '    <Company>Tech with Christian</Company>' >> TWC.ClassLib.DhlExpressClient/TWC.ClassLib.DhlExpressClient.csproj
+        echo '    <IsPackable>true</IsPackable>' >> TWC.ClassLib.DhlExpressClient/TWC.ClassLib.DhlExpressClient.csproj
+        echo '    <GenerateDocumentationFile>true</GenerateDocumentationFile>' >> TWC.ClassLib.DhlExpressClient/TWC.ClassLib.DhlExpressClient.csproj
+        echo '    <EmbedAllSources>true</EmbedAllSources>' >> TWC.ClassLib.DhlExpressClient/TWC.ClassLib.DhlExpressClient.csproj
+        echo '    <Nullable>enable</Nullable>' >> TWC.ClassLib.DhlExpressClient/TWC.ClassLib.DhlExpressClient.csproj
+        echo '  </PropertyGroup>' >> TWC.ClassLib.DhlExpressClient/TWC.ClassLib.DhlExpressClient.csproj
+        echo '  <ItemGroup>' >> TWC.ClassLib.DhlExpressClient/TWC.ClassLib.DhlExpressClient.csproj
+        echo '    <Compile Include="**\*.cs" />' >> TWC.ClassLib.DhlExpressClient/TWC.ClassLib.DhlExpressClient.csproj
+        echo '  </ItemGroup>' >> TWC.ClassLib.DhlExpressClient/TWC.ClassLib.DhlExpressClient.csproj
+        echo '</Project>' >> TWC.ClassLib.DhlExpressClient/TWC.ClassLib.DhlExpressClient.csproj
+
+    - name: Build with dotnet
+      run: dotnet build --configuration Release
+
+    - name: Get version
+      id: get_version
+      run: echo ::set-output name=VERSION::${GITHUB_REF#refs/tags/}
+
+    - name: Pack with dotnet
+      run: dotnet pack -c Release /p:PackageVersion=${{ steps.get_version.outputs.VERSION }} --no-build --output .
+      
+    - name: Push to NuGet
+      run: dotnet nuget push "*.nupkg" --api-key ${{secrets.NUGET_API_KEY}} --source https://api.nuget.org/v3/index.json
